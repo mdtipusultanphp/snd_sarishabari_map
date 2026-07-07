@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_parent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Balance Tracker Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- স্টাইল (অপরিবর্তিত) --- */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { 
+            height: 100%; width: 100%; margin: 0; padding: 0; 
+            font-family: 'Hind Siliguri', 'Roboto', sans-serif; 
+            overflow: hidden; background-color: #f0f2f5; color: #333;
+            touch-action: none;
+        }
+        #map { height: 100%; width: 100%; }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        .control-panel {
+            position: absolute; top: 15px; left: 15px; z-index: 10;
+            width: 350px; max-width: 94%;
+            display: flex; flex-direction: column;
+            overflow: hidden; transition: height 0.3s ease, width 0.3s ease;
+            min-height: 50px;
+        }
+
+        .panel-header {
+            padding: 10px 15px; background: linear-gradient(to right, #ffffff, #f1f3f4);
+            border-bottom: 1px solid #e1e4e8; display: flex; justify-content: space-between; align-items: center;
+            cursor: move; user-select: none;
+        }
+        .header-left { display: flex; align-items: center; gap: 8px; }
+        .panel-title { font-weight: 700; font-size: 16px; color: #1a73e8; }
+        
+        .lang-switch { display: flex; gap: 5px; background: #e8f0fe; padding: 3px; border-radius: 20px; margin-right: 10px; }
+        .lang-btn { font-size: 11px; padding: 4px 8px; border-radius: 15px; border: none; cursor: pointer; font-weight: 600; background: transparent; color: #5f6368; transition: all 0.2s; }
+        .lang-btn.active { background: #1a73e8; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+        .minimize-btn { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fff; color: #5f6368; font-size: 18px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .minimize-btn:hover { color: #d93025; }
+
+        .panel-body { padding: 15px; overflow-y: auto; flex-grow: 1; max-height: 70vh; }
+        .control-panel.minimized { height: 55px !important; width: 280px !important; border-radius: 28px; }
+        .minimized .panel-body, .minimized .resize-handle { display: none; }
+        .minimized .panel-header { border-bottom: none; background: #fff; border-radius: 30px; }
+
+        .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .input-wrapper { position: relative; flex: 1; display: flex; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-radius: 8px; }
+        .input-wrapper input { flex: 1; padding: 10px; border: 1px solid #dadce0; border-radius: 8px 0 0 8px; outline: none; font-size: 14px; }
+        .input-wrapper input:focus { border-color: #1a73e8; }
+        .input-wrapper button { padding: 0 15px; background: #1a73e8; color: white; border: none; border-radius: 0 8px 8px 0; cursor: pointer; font-weight: 600; }
+
+        .status-badge { background: #e8f0fe; color: #1967d2; padding: 8px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 12px; border: 1px solid #d2e3fc; display: flex; align-items: center; gap: 6px; }
+        .route-info-box { display: none; background: #e6f4ea; color: #137333; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 600; text-align: center; border: 1px solid #ceead6; }
+
+        .filter-section { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #eee; margin-top: 5px; margin-bottom: 8px; }
+        .filter-header { font-size: 12px; color: #5f6368; text-align: center; margin-bottom: 8px; font-weight: 600; }
+        .checkbox-group { display: flex; justify-content: space-between; gap: 5px; }
+        .custom-checkbox { display: flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; padding: 5px; border-radius: 4px; transition: background 0.2s; }
+        .custom-checkbox:hover { background: #e8eaed; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 3px rgba(0,0,0,0.3); }
+
+        .book-select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #dadce0;
+            background: #fff;
+            font-size: 13px;
+            outline: none;
+            color: #333;
+            cursor: pointer;
+        }
+        .book-select:focus { border-color: #1a73e8; }
+
+        .resize-handle { position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: se-resize; background: linear-gradient(135deg, transparent 50%, #1a73e8 50%); border-bottom-right-radius: 16px; opacity: 0.7; }
+
+        /* ড্র্যাগেবল বাটন স্টাইল */
+        .float-alarm-btn {
+            position: absolute; bottom: 30px; left: 20px; z-index: 100;
+            background: #d93025; color: white; border: none;
+            padding: 12px 20px; border-radius: 50px;
+            font-size: 15px; font-weight: 700; cursor: move; /* পিসি কার্সর */
+            box-shadow: 0 4px 15px rgba(217, 48, 37, 0.4);
+            display: flex; align-items: center; gap: 8px;
+            transition: background 0.2s; 
+            touch-action: none; /* মোবাইলে ডিফল্ট টাচ অ্যাকশন বন্ধ */
+            user-select: none;
+        }
+        .float-alarm-btn.off { background: #5f6368; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+
+        /* মডাল */
+        .modal-overlay { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); pointer-events: none; }
+        .modal-card { pointer-events: auto; background: #fff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 0; border-radius: 16px; width: 92%; max-width: 380px; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.4); font-family: inherit; }
+        .modal-header { padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; border-radius: 16px 16px 0 0; cursor: move; }
+        .modal-title { font-size: 18px; font-weight: 700; color: #202124; margin: 0; }
+        .close-icon { font-size: 26px; color: #5f6368; cursor: pointer; line-height: 1; }
+        .modal-body { padding: 20px; }
+        .info-item { margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #f1f3f4; }
+        .info-item:last-child { border-bottom: none; }
+        .label { font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 4px; }
+        .value { font-size: 17px; font-weight: 700; color: #202124; }
+        .bal-red { color: #d93025; } .bal-orange { color: #e37400; } .bal-green { color: #137333; }
+        .action-row { display: flex; gap: 10px; margin-top: 8px; }
+        .btn { flex: 1; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; transition: background 0.2s; }
+        .btn-copy { background: #e8f0fe; color: #1967d2; }
+        .btn-call { background: #e6f4ea; color: #137333; }
+        .btn-update { background: #673ab7; color: white; width: 100%; margin-top: 8px; box-shadow: 0 2px 5px rgba(103, 58, 183, 0.3); }
+        .btn-update:hover { background: #5e35b1; }
+        .btn-close-full { width: 100%; padding: 12px; background: #d93025; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; margin-top: 15px; cursor: pointer; }
+        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 5px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 600px) {
+            .control-panel { left: 3%; width: 94%; top: 10px; }
+            .float-alarm-btn { bottom: 80px; right: 20px; left: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glass-panel control-panel" id="mainPanel">
+        <div class="panel-header" id="panelHeader">
+            <div class="header-left">
+                <div class="panel-title" id="uiTitle">🛠️ বকেয়া ট্র্যাকার</div>
+            </div>
+            <div style="display:flex; align-items:center;">
+                <div class="lang-switch">
+                    <button class="lang-btn active" id="btnBN" onclick="setLanguage('bn')">বাংলা</button>
+                    <button class="lang-btn" id="btnEN" onclick="setLanguage('en')">EN</button>
+                </div>
+                <div class="minimize-btn" id="toggleBtn" onclick="togglePanel()">×</div>
+            </div>
+        </div>
+
+        <div class="panel-body">
+            <div class="status-badge" id="locationStatus">📍 লোকেশন খোঁজা হচ্ছে...</div>
+            <div id="routeDisplay" class="route-info-box"></div>
+
+            <div class="search-row">
+                <div class="input-wrapper">
+                    <input type="text" id="searchInput" placeholder="গ্রাহক নং...">
+                    <button onclick="searchCustomer()" id="btnSearchCust">খুঁজুন</button>
+                </div>
+            </div>
+            <div class="search-row">
+                <div class="input-wrapper">
+                    <input type="text" id="meterInput" placeholder="মিটার নং...">
+                    <button onclick="searchMeter()" id="btnSearchMeter">খুঁজুন</button>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <div class="filter-header" id="filterHeader">বকেয়া ফিল্টার</div>
+                <div class="checkbox-group">
+                    <label class="custom-checkbox"><input type="checkbox" id="filterRed" checked onchange="applyFilters()"> <div class="dot" style="background:#d93025"></div> <span id="lblRed">১৫k+</span></label>
+                    <label class="custom-checkbox"><input type="checkbox" id="filterOrange" checked onchange="applyFilters()"> <div class="dot" style="background:#f4b400"></div> <span id="lblOrange">৫-১৫k</span></label>
+                    <label class="custom-checkbox"><input type="checkbox" id="filterGreen" checked onchange="applyFilters()"> <div class="dot" style="background:#0F9D58"></div> <span id="lblGreen"><৫k</span></label>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <div class="filter-header" id="bookFilterHeader">বই ফিল্টার</div>
+                <select id="bookSelect" class="book-select" onchange="applyFilters()">
+                    <option value="all">সব বই (All Books)</option>
+                </select>
+            </div>
+        </div>
+        <div class="resize-handle" id="resizeHandle"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <button class="float-alarm-btn" id="alarmToggleBtn">
+        <span style="font-size:18px">🚨</span> <span id="alarmText">অ্যালার্ম: অন</span>
+    </button>
+
+    <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto" loop></audio>
+    <audio id="highAlertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto" loop></audio>
+
+    <div id="customerModal" class="modal-overlay">
+        <div id="modalContent" class="modal-card">
+            <div class="modal-header" id="modalDragHeader">
+                <h3 class="modal-title" id="modalCustName">নাম</h3>
+                <div class="close-icon" onclick="closeModal()">×</div>
+            </div>
+            <div class="modal-body" id="modalBodyContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'AIzaSyAeM3LNsFPrp_Fxi8JKZf9j_lIeDNxI2q8';
+        const DEFAULT_CENTER = { lat: 23.685, lng: 90.356 };
+        const PROXIMITY_THRESHOLD = 100;
+
+        const texts = {
+            bn: {
+                title: "🛠️ বকেয়া ট্র্যাকার", locLoading: "📍 লোকেশন খোঁজা হচ্ছে...", locActive: "📍 লোকেশন অ্যাকটিভ", locError: "⚠️ জিপিএস সমস্যা",
+                searchCustPlace: "গ্রাহক নং...", searchMeterPlace: "মিটার নং...", btnSearch: "খুঁজুন", 
+                filterTitle: "বকেয়া ফিল্টার", bookFilterTitle: "বই ফিল্টার", allBooks: "সব বই (All)",
+                alarmOn: "অ্যালার্ম: অন", alarmOff: "অ্যালার্ম: অফ",
+                modalBal: "বকেয়া পরিমাণ", modalCust: "গ্রাহক নম্বর", modalMobile: "মোবাইল", modalDetail: "বিস্তারিত",
+                btnCopy: "📋 কপি", btnCall: "📞 কল", btnUpdate: "📝 বকেয়া হালনাগাদ করুন", btnClose: "বন্ধ করুন",
+                routeFinding: "পথ খোঁজা হচ্ছে... ⏳", routeError: "পথ দেখানো সম্ভব নয়", notFound: "পাওয়া যায়নি!",
+                promptUpdate: "নতুন বকেয়া বিলের পরিমাণ লিখুন:", updating: "হালনাগাদ হচ্ছে...", updateSuccess: "সফলভাবে আপডেট হয়েছে! নতুন ব্যালেন্স:", updateFail: "আপডেট ব্যর্থ হয়েছে.",
+                dist: "দূরত্ব", time: "সময়"
+            },
+            en: {
+                title: "🛠️ Due Tracker", locLoading: "📍 Locating...", locActive: "📍 Location Active", locError: "⚠️ GPS Error",
+                searchCustPlace: "Customer No...", searchMeterPlace: "Meter No...", btnSearch: "Search", 
+                filterTitle: "Balance Filter", bookFilterTitle: "Book Filter", allBooks: "All Books",
+                alarmOn: "Alarm: ON", alarmOff: "Alarm: OFF",
+                modalBal: "Due Amount", modalCust: "Customer No", modalMobile: "Mobile", modalDetail: "Details",
+                btnCopy: "📋 Copy", btnCall: "📞 Call", btnUpdate: "📝 Update Balance", btnClose: "Close",
+                routeFinding: "Finding Route... ⏳", routeError: "Route not found", notFound: "Not Found!",
+                promptUpdate: "Enter new due balance:", updating: "Updating...", updateSuccess: "Updated Successfully! New Balance:", updateFail: "Update Failed.",
+                dist: "Distance", time: "Time"
+            }
+        };
+
+        let currentLang = 'bn';
+        let map, userMarker, directionsService, directionsRenderer;
+        let userCurrentPos = null;
+        let customerMarkers = [], allCustomerData = [];
+        let alarmEnabled = true;
+        let isPanelMinimized = false;
+        let currentAnimatingMarker = null;
+
+        const mediumAudio = document.getElementById("alertSound");
+        const highAudio = document.getElementById("highAlertSound");
+        mediumAudio.volume = 0.8; highAudio.volume = 1.0;
+
+        let audioUnlocked = false;
+        function unlockAudioSystem() {
+            if (!audioUnlocked) {
+                mediumAudio.play().then(() => { mediumAudio.pause(); mediumAudio.currentTime = 0; }).catch(() => {});
+                highAudio.play().then(() => { highAudio.pause(); highAudio.currentTime = 0; }).catch(() => {});
+                audioUnlocked = true;
+                document.removeEventListener('click', unlockAudioSystem);
+                document.removeEventListener('touchstart', unlockAudioSystem);
+            }
+        }
+        document.addEventListener('click', unlockAudioSystem);
+        document.addEventListener('touchstart', unlockAudioSystem);
+
+        function initMap() {
+            try {
+                map = new google.maps.Map(document.getElementById("map"), {
+                    zoom: 14, center: DEFAULT_CENTER,
+                    disableDefaultUI: false, zoomControl: true,
+                    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
+                    gestureHandling: "greedy", mapTypeControl: true, rotateControl: true, fullscreenControl: true
+                });
+
+                directionsService = new google.maps.DirectionsService();
+                directionsRenderer = new google.maps.DirectionsRenderer({
+                    map: map, suppressMarkers: true,
+                    polylineOptions: { strokeColor: "#1a73e8", strokeWeight: 6, strokeOpacity: 0.8 }
+                });
+
+                setupPanelDraggable();
+                setupPanelResize();
+                setupAlarmDrag();
+                makeElementDraggable(document.getElementById("modalContent"), document.getElementById("modalDragHeader"));
+                
+                loadCustomerData();
+                startLocationTracking();
+                updateUILanguage();
+
+            } catch (error) { alert("Map loading failed."); }
+        }
+
+        // --- অ্যালার্ম লজিক ---
+        function checkAlarms() {
+            if (!alarmEnabled || !userCurrentPos || customerMarkers.length === 0) {
+                stopAllAlarms();
+                return;
+            }
+
+            let playRed = false;
+            let playOrange = false;
+
+            for (let i = 0; i < customerMarkers.length; i++) {
+                const m = customerMarkers[i];
+                if (!m.getMap()) continue; 
+
+                const dist = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(userCurrentPos), 
+                    m.getPosition()
+                );
+
+                if (dist <= PROXIMITY_THRESHOLD) { 
+                    if (m.data.balance > 15000) {
+                        playRed = true;
+                        break; 
+                    } else if (m.data.balance >= 5000) {
+                        playOrange = true;
+                    }
+                }
+            }
+
+            if (playRed) {
+                if (highAudio.paused) {
+                    mediumAudio.pause(); mediumAudio.currentTime = 0;
+                    highAudio.currentTime = 0;
+                    highAudio.play().catch(e => {});
+                }
+            } else if (playOrange) {
+                if (mediumAudio.paused) {
+                    highAudio.pause(); highAudio.currentTime = 0;
+                    mediumAudio.currentTime = 0;
+                    mediumAudio.play().catch(e => {});
+                }
+            } else {
+                stopAllAlarms();
+            }
+        }
+
+        function stopAllAlarms() {
+            mediumAudio.pause(); mediumAudio.currentTime = 0;
+            highAudio.pause(); highAudio.currentTime = 0;
+        }
+
+        // --- অ্যালার্ম বাটন ড্র্যাগ ফিক্স ---
+        function setupAlarmDrag() {
+            const btn = document.getElementById("alarmToggleBtn");
+            let isDragging = false;
+            let startX, startY, initLeft, initTop;
+
+            btn.addEventListener("mousedown", (e) => {
+                unlockAudioSystem();
+                startX = e.clientX;
+                startY = e.clientY;
+                initLeft = btn.offsetLeft;
+                initTop = btn.offsetTop;
+                isDragging = false;
+
+                const onMouseMove = (evt) => {
+                    const dx = evt.clientX - startX;
+                    const dy = evt.clientY - startY;
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                        isDragging = true;
+                        btn.style.left = (initLeft + dx) + "px";
+                        btn.style.top = (initTop + dy) + "px";
+                        btn.style.bottom = 'auto';
+                        btn.style.right = 'auto';
+                    }
+                };
+
+                const onMouseUp = () => {
+                    document.removeEventListener("mousemove", onMouseMove);
+                    document.removeEventListener("mouseup", onMouseUp);
+                    if (!isDragging) toggleAlarm();
+                };
+
+                document.addEventListener("mousemove", onMouseMove);
+                document.addEventListener("mouseup", onMouseUp);
+            });
+
+            btn.addEventListener("touchstart", (e) => {
+                unlockAudioSystem();
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                initLeft = btn.offsetLeft;
+                initTop = btn.offsetTop;
+                isDragging = false;
+            }, {passive: false});
+
+            btn.addEventListener("touchmove", (e) => {
+                const touch = e.touches[0];
+                const dx = touch.clientX - startX;
+                const dy = touch.clientY - startY;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    isDragging = true;
+                    e.preventDefault();
+                    btn.style.left = (initLeft + dx) + "px";
+                    btn.style.top = (initTop + dy) + "px";
+                    btn.style.bottom = 'auto';
+                    btn.style.right = 'auto';
+                }
+            }, {passive: false});
+
+            btn.addEventListener("touchend", (e) => {
+                if (!isDragging) {
+                    e.preventDefault();
+                    toggleAlarm();
+                }
+                isDragging = false;
+            });
+        }
+
+        // --- অন্যান্য ফাংশন ---
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.getElementById("btnBN").classList.toggle("active", lang === 'bn');
+            document.getElementById("btnEN").classList.toggle("active", lang === 'en');
+            updateUILanguage();
+            if(document.getElementById("customerModal").style.display === "block" && currentAnimatingMarker) {
+                openCustomerModal(currentAnimatingMarker.data);
+            }
+        }
+
+        function updateUILanguage() {
+            const t = texts[currentLang];
+            document.getElementById("uiTitle").innerText = t.title;
+            document.getElementById("searchInput").placeholder = t.searchCustPlace;
+            document.getElementById("meterInput").placeholder = t.searchMeterPlace;
+            document.getElementById("btnSearchCust").innerText = t.btnSearch;
+            document.getElementById("btnSearchMeter").innerText = t.btnSearch;
+            document.getElementById("filterHeader").innerText = t.filterTitle;
+            document.getElementById("bookFilterHeader").innerText = t.bookFilterTitle;
+            
+            const bookSelect = document.getElementById("bookSelect");
+            if(bookSelect.options.length > 0) {
+                bookSelect.options[0].text = t.allBooks;
+            }
+
+            const alarmBtnText = document.getElementById("alarmText");
+            alarmBtnText.innerText = alarmEnabled ? t.alarmOn : t.alarmOff;
+            if(userCurrentPos) document.getElementById("locationStatus").innerHTML = `<span style="font-size:16px;">📍</span> ${t.locActive}`;
+            else document.getElementById("locationStatus").innerText = t.locLoading;
+        }
+
+        function togglePanel() {
+            const panel = document.getElementById("mainPanel");
+            const btn = document.getElementById("toggleBtn");
+            isPanelMinimized = !isPanelMinimized;
+            if (isPanelMinimized) { panel.classList.add("minimized"); btn.innerHTML = "+"; btn.style.color = "#1a73e8"; } 
+            else { panel.classList.remove("minimized"); btn.innerHTML = "×"; btn.style.color = "#5f6368"; }
+        }
+
+        function setupPanelDraggable() { makeElementDraggable(document.getElementById("mainPanel"), document.getElementById("panelHeader")); }
+
+        function makeElementDraggable(elm, h) {
+            let sX, sY, iL, iT;
+            const start = (e) => {
+                if(e.target.id === "toggleBtn" || e.target.classList.contains("lang-btn")) return;
+                const evt = e.type.includes('touch') ? e.touches[0] : e;
+                sX = evt.clientX; sY = evt.clientY; iL = elm.offsetLeft; iT = elm.offsetTop;
+                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move);
+                document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end);
+            };
+            const move = (e) => {
+                e.preventDefault(); const evt = e.type.includes('touch') ? e.touches[0] : e;
+                elm.style.left = (iL + (evt.clientX - sX)) + "px"; elm.style.top = (iT + (evt.clientY - sY)) + "px";
+            };
+            const end = () => {
+                document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move);
+                document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end);
+            };
+            h.addEventListener("mousedown", start); h.addEventListener("touchstart", start);
+        }
+
+        function setupPanelResize() {
+            const panel = document.getElementById("mainPanel");
+            const handle = document.getElementById("resizeHandle");
+            let sW, sH, sX, sY;
+            const start = (e) => {
+                if(isPanelMinimized) return;
+                const evt = e.type.includes('touch') ? e.touches[0] : e;
+                sW = panel.offsetWidth; sH = panel.offsetHeight; sX = evt.clientX; sY = evt.clientY;
+                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move);
+                document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end); e.preventDefault(); e.stopPropagation();
+            };
+            const move = (e) => {
+                const evt = e.type.includes('touch') ? e.touches[0] : e;
+                const nW = sW + (evt.clientX - sX); const nH = sH + (evt.clientY - sY);
+                if(nW > 250) panel.style.width = nW + "px"; if(nH > 100) panel.style.height = nH + "px";
+            };
+            const end = () => {
+                document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move);
+                document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end);
+            };
+            handle.addEventListener("mousedown", start); handle.addEventListener("touchstart", start);
+        }
+
+        function loadCustomerData() {
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run.withSuccessHandler(processData).getCustomerData();
+            } else {
+                processData([
+                    {name: "Test User 1", lat: 23.685, lng: 90.356, balance: 16000, iconColor: 'red', custNum: "1001", mobile: "01700 000000", bookNo: "B-01", meterNo: "M1", tariff: "A", address: "Dhaka"},
+                    {name: "Test User 2", lat: 23.686, lng: 90.357, balance: 6000, iconColor: 'orange', custNum: "1002", mobile: "N/A", bookNo: "B-02", meterNo: "M2", tariff: "A", address: "Dhaka"},
+                    {name: "Test User 3", lat: 23.684, lng: 90.355, balance: 2000, iconColor: 'green', custNum: "1003", mobile: "01800-000000", bookNo: "B-01", meterNo: "M3", tariff: "A", address: "Dhaka"}
+                ]); 
+            }
+        }
+        
+        function processData(data) { 
+            allCustomerData = data; 
+            populateBookFilter();
+            applyFilters(); 
+        }
+
+        function populateBookFilter() {
+            const select = document.getElementById("bookSelect");
+            select.innerHTML = `<option value="all">${texts[currentLang].allBooks}</option>`;
+            const books = allCustomerData.map(c => c.bookNo ? String(c.bookNo).trim() : "").filter(b => b !== "");
+            const uniqueBooks = [...new Set(books)].sort();
+            uniqueBooks.forEach(book => {
+                const option = document.createElement("option");
+                option.value = book;
+                option.innerText = book;
+                select.appendChild(option);
+            });
+        }
+
+        function applyFilters() {
+            customerMarkers.forEach(m => m.setMap(null)); customerMarkers = [];
+            
+            const r = document.getElementById("filterRed").checked;
+            const o = document.getElementById("filterOrange").checked;
+            const g = document.getElementById("filterGreen").checked;
+            const selectedBook = document.getElementById("bookSelect").value;
+
+            allCustomerData.forEach(c => {
+                let show = false;
+                if ((c.iconColor === 'red' && r) || (c.iconColor === 'orange' && o) || (c.iconColor === 'green' && g)) {
+                    show = true;
+                }
+                if (show && selectedBook !== 'all') {
+                    const cBook = c.bookNo ? String(c.bookNo).trim() : "";
+                    if (cBook !== selectedBook) {
+                        show = false;
+                    }
+                }
+                if (show) {
+                    const m = new google.maps.Marker({
+                        position: { lat: c.lat, lng: c.lng }, map: map,
+                        icon: 'https://maps.gstatic.com/mapfiles/ms2/micons/' + c.iconColor + '-dot.png',
+                        title: c.name
+                    });
+                    m.addListener("click", () => { openCustomerModal(c); calculateRoute(c); animateMarker(m); });
+                    m.data = c;
+                    customerMarkers.push(m);
+                }
+            });
+            checkAlarms();
+        }
+
+        function openCustomerModal(data) {
+            currentAnimatingMarker = { data: data };
+            const modal = document.getElementById("customerModal");
+            const title = document.getElementById("modalCustName");
+            const body = document.getElementById("modalBodyContent");
+            const t = texts[currentLang];
+            title.innerText = data.name;
+            let balClass = data.iconColor === 'red' ? 'bal-red' : (data.iconColor === 'orange' ? 'bal-orange' : 'bal-green');
+            
+            // মোবাইল নাম্বার ক্লিন করা (শুধুমাত্র ডায়াল করার জন্য)
+            let cleanMobile = data.mobile ? data.mobile.replace(/[^0-9+]/g, '') : '';
+
+            body.innerHTML = `
+                <div class="info-item">
+                    <span class="label">${t.modalBal}</span>
+                    <span class="${balClass}" style="font-size:22px; font-weight:800;">${data.balance.toLocaleString('bn-BD')} ৳</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">${t.modalCust}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="value">${data.custNum}</span>
+                    </div>
+                    <div class="action-row"><button class="btn btn-copy" onclick="copyToClipboard('${data.custNum}')">${t.btnCopy}</button></div>
+                </div>
+                <div class="info-item">
+                    <span class="label">${t.modalMobile}</span>
+                    <span class="value">${data.mobile || '-'}</span>
+                    ${data.mobile && data.mobile !== 'N/A' ? `
+                    <div class="action-row">
+                        <a href="tel:${cleanMobile}" class="btn btn-call">${t.btnCall}</a>
+                        <button class="btn btn-copy" onclick="copyToClipboard('${data.mobile}')">${t.btnCopy}</button>
+                    </div>` : ''}
+                    <button id="btnUpdate_${data.custNum}" class="btn btn-update" onclick="promptUpdateBalance('${data.custNum}', ${data.balance})">
+                        ${t.btnUpdate}
+                    </button>
+                </div>
+                <div class="info-item">
+                    <span class="label">${t.modalDetail}</span>
+                    <div style="font-size:14px;">
+                        Meter: <b>${data.meterNo}</b> | Book: <b>${data.bookNo}</b> | Tariff: <b>${data.tariff}</b><br>Addr: ${data.address}
+                    </div>
+                </div>
+                <button class="btn-close-full" onclick="closeModal()">${t.btnClose}</button>
+            `;
+            modal.style.display = "block";
+            if(window.innerWidth < 600 && !isPanelMinimized) togglePanel();
+        }
+
+        function promptUpdateBalance(custNum, oldBal) {
+            const t = texts[currentLang];
+            const newBal = prompt(t.promptUpdate, oldBal);
+            if (newBal !== null && !isNaN(newBal) && newBal.trim() !== "") {
+                const btn = document.getElementById("btnUpdate_" + custNum);
+                const originalText = btn.innerHTML;
+                btn.innerHTML = `<div class="spinner"></div> ${t.updating}`; btn.disabled = true;
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    google.script.run.withSuccessHandler(res => {
+                        alert(t.updateSuccess + " " + newBal); loadCustomerData(); closeModal();
+                    }).withFailureHandler(err => {
+                        alert(t.updateFail); btn.innerHTML = originalText; btn.disabled = false;
+                    }).updateCustomerBalance(custNum, newBal);
+                } else {
+                    setTimeout(() => { alert("Mock: " + t.updateSuccess + " " + newBal); closeModal(); }, 1000);
+                }
+            }
+        }
+        function closeModal() { document.getElementById("customerModal").style.display = "none"; }
+        function copyToClipboard(txt) { navigator.clipboard.writeText(txt).then(() => alert(texts[currentLang].btnCopy + ": " + txt)); }
+        function animateMarker(m) { map.setZoom(18); map.setCenter(m.getPosition()); m.setAnimation(google.maps.Animation.BOUNCE); setTimeout(()=>m.setAnimation(null), 3000); }
+        function searchCustomer() { executeSearch('custNum', document.getElementById("searchInput").value); }
+        function searchMeter() { executeSearch('meterNo', document.getElementById("meterInput").value); }
+        function executeSearch(k, v) {
+            if(!v) return;
+            const t = customerMarkers.find(m => String(m.data[k]).trim() === String(v).trim());
+            if (t) { animateMarker(t); openCustomerModal(t.data); calculateRoute(t.data); } else { alert(texts[currentLang].notFound); }
+        }
+
+        function startLocationTracking() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(pos => {
+                    userCurrentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    const t = texts[currentLang];
+                    document.getElementById("locationStatus").innerHTML = `<span style="font-size:16px;">📍</span> ${t.locActive}`;
+                    document.getElementById("locationStatus").style.color = "#137333";
+                    
+                    if (!userMarker) {
+                        userMarker = new google.maps.Marker({
+                            position: userCurrentPos, map: map,
+                            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: "#1a73e8", fillOpacity: 1, strokeColor: "white", strokeWeight: 2 }
+                        });
+                        map.setCenter(userCurrentPos);
+                    } else { userMarker.setPosition(userCurrentPos); }
+                    
+                    checkAlarms(); 
+
+                }, e => document.getElementById("locationStatus").innerHTML = texts[currentLang].locError, { enableHighAccuracy: true });
+            }
+        }
+
+        function calculateRoute(d) {
+            if (!userCurrentPos) return;
+            const b = document.getElementById("routeDisplay"); b.style.display="block"; 
+            b.innerHTML = texts[currentLang].routeFinding;
+            directionsService.route({ origin: userCurrentPos, destination: { lat: d.lat, lng: d.lng }, travelMode: 'DRIVING' }, (r, s) => {
+                const t = texts[currentLang];
+                if (s === 'OK') { directionsRenderer.setDirections(r); b.innerHTML = `🚗 ${t.dist}: ${r.routes[0].legs[0].distance.text} | ⏱️ ${t.time}: ${r.routes[0].legs[0].duration.text}`; } 
+                else { b.innerHTML = t.routeError; }
+            });
+        }
+
+        function toggleAlarm() {
+            alarmEnabled = !alarmEnabled;
+            unlockAudioSystem();
+            updateUILanguage();
+            
+            const btn = document.getElementById("alarmToggleBtn");
+            if(!alarmEnabled) {
+                btn.classList.add("off");
+                stopAllAlarms();
+            } else {
+                btn.classList.remove("off");
+                checkAlarms();
+            }
+        }
+
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAeM3LNsFPrp_Fxi8JKZf9j_lIeDNxI2q8&libraries=geometry&callback=initMap"></script>
+</body>
+</html>
