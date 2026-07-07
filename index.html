@@ -2,11 +2,15 @@
 <html>
 <head>
     <base target="_parent">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Balance Tracker Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
     <style>
-        /* --- স্টাইল (অপরিবর্তিত) --- */
+        /* --- স্টাইল --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { 
             height: 100%; width: 100%; margin: 0; padding: 0; 
@@ -83,16 +87,15 @@
 
         .resize-handle { position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: se-resize; background: linear-gradient(135deg, transparent 50%, #1a73e8 50%); border-bottom-right-radius: 16px; opacity: 0.7; }
 
-        /* ড্র্যাগেবল বাটন স্টাইল */
         .float-alarm-btn {
             position: absolute; bottom: 30px; left: 20px; z-index: 100;
             background: #d93025; color: white; border: none;
             padding: 12px 20px; border-radius: 50px;
-            font-size: 15px; font-weight: 700; cursor: move; /* পিসি কার্সর */
+            font-size: 15px; font-weight: 700; cursor: move; 
             box-shadow: 0 4px 15px rgba(217, 48, 37, 0.4);
             display: flex; align-items: center; gap: 8px;
             transition: background 0.2s; 
-            touch-action: none; /* মোবাইলে ডিফল্ট টাচ অ্যাকশন বন্ধ */
+            touch-action: none; 
             user-select: none;
         }
         .float-alarm-btn.off { background: #5f6368; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
@@ -142,7 +145,7 @@
         </div>
 
         <div class="panel-body">
-            <div class="status-badge" id="locationStatus">📍 লোকেশন খোঁজা হচ্ছে...</div>
+            <div class="status-badge" id="locationStatus">📍 ডাটা লোড হচ্ছে...</div>
             <div id="routeDisplay" class="route-info-box"></div>
 
             <div class="search-row">
@@ -197,8 +200,12 @@
     </div>
 
     <script>
+        // --- GitHub RAW EXCEL LINK --- 
+        // আপনি যদি অন্য রিপোজিটরি ব্যবহার করেন, তবে এই লিংকটি পরিবর্তন করে নিবেন।
+        const EXCEL_URL = 'https://raw.githubusercontent.com/TipuSultanPHP/snd_sarishabari_map/main/snd_sarishabari_map.xlsx';
+
         const API_KEY = 'AIzaSyAeM3LNsFPrp_Fxi8JKZf9j_lIeDNxI2q8';
-        const DEFAULT_CENTER = { lat: 23.685, lng: 90.356 };
+        const DEFAULT_CENTER = { lat: 24.7629, lng: 89.8577 }; // Sarishabari Center
         const PROXIMITY_THRESHOLD = 100;
 
         const texts = {
@@ -211,7 +218,7 @@
                 btnCopy: "📋 কপি", btnCall: "📞 কল", btnUpdate: "📝 বকেয়া হালনাগাদ করুন", btnClose: "বন্ধ করুন",
                 routeFinding: "পথ খোঁজা হচ্ছে... ⏳", routeError: "পথ দেখানো সম্ভব নয়", notFound: "পাওয়া যায়নি!",
                 promptUpdate: "নতুন বকেয়া বিলের পরিমাণ লিখুন:", updating: "হালনাগাদ হচ্ছে...", updateSuccess: "সফলভাবে আপডেট হয়েছে! নতুন ব্যালেন্স:", updateFail: "আপডেট ব্যর্থ হয়েছে.",
-                dist: "দূরত্ব", time: "সময়"
+                dist: "দূরত্ব", time: "সময়"
             },
             en: {
                 title: "🛠️ Due Tracker", locLoading: "📍 Locating...", locActive: "📍 Location Active", locError: "⚠️ GPS Error",
@@ -271,227 +278,59 @@
                 setupAlarmDrag();
                 makeElementDraggable(document.getElementById("modalContent"), document.getElementById("modalDragHeader"));
                 
-                loadCustomerData();
-                startLocationTracking();
+                loadExcelData();
                 updateUILanguage();
 
             } catch (error) { alert("Map loading failed."); }
         }
 
-        // --- অ্যালার্ম লজিক ---
-        function checkAlarms() {
-            if (!alarmEnabled || !userCurrentPos || customerMarkers.length === 0) {
-                stopAllAlarms();
-                return;
-            }
+        // --- Fetch Data from Excel (GitHub) ---
+        async function loadExcelData() {
+            document.getElementById("locationStatus").innerText = "⏳ ডাটা লোড হচ্ছে...";
+            try {
+                const response = await fetch(EXCEL_URL);
+                if (!response.ok) throw new Error("Network response was not ok");
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const rawData = XLSX.utils.sheet_to_json(worksheet);
 
-            let playRed = false;
-            let playOrange = false;
+                // Format data based on your specific Excel Column Names
+                const formattedData = rawData.map(row => {
+                    const lat = parseFloat(row.latitud || row.latitude || 0);
+                    const lng = parseFloat(row.LONGITUDE || row.longitude || 0);
+                    const bal = parseFloat(String(row.TOTAL_BALANCE || 0).trim().replace(/,/g, '')) || 0; 
+                    
+                    if (!lat || !lng) return null; 
+                    
+                    let iconColor = 'green'; 
+                    if (bal >= 15000) iconColor = 'red'; 
+                    else if (bal >= 5000) iconColor = 'orange'; 
 
-            for (let i = 0; i < customerMarkers.length; i++) {
-                const m = customerMarkers[i];
-                if (!m.getMap()) continue; 
-
-                const dist = google.maps.geometry.spherical.computeDistanceBetween(
-                    new google.maps.LatLng(userCurrentPos), 
-                    m.getPosition()
-                );
-
-                if (dist <= PROXIMITY_THRESHOLD) { 
-                    if (m.data.balance > 15000) {
-                        playRed = true;
-                        break; 
-                    } else if (m.data.balance >= 5000) {
-                        playOrange = true;
-                    }
-                }
-            }
-
-            if (playRed) {
-                if (highAudio.paused) {
-                    mediumAudio.pause(); mediumAudio.currentTime = 0;
-                    highAudio.currentTime = 0;
-                    highAudio.play().catch(e => {});
-                }
-            } else if (playOrange) {
-                if (mediumAudio.paused) {
-                    highAudio.pause(); highAudio.currentTime = 0;
-                    mediumAudio.currentTime = 0;
-                    mediumAudio.play().catch(e => {});
-                }
-            } else {
-                stopAllAlarms();
-            }
-        }
-
-        function stopAllAlarms() {
-            mediumAudio.pause(); mediumAudio.currentTime = 0;
-            highAudio.pause(); highAudio.currentTime = 0;
-        }
-
-        // --- অ্যালার্ম বাটন ড্র্যাগ ফিক্স ---
-        function setupAlarmDrag() {
-            const btn = document.getElementById("alarmToggleBtn");
-            let isDragging = false;
-            let startX, startY, initLeft, initTop;
-
-            btn.addEventListener("mousedown", (e) => {
-                unlockAudioSystem();
-                startX = e.clientX;
-                startY = e.clientY;
-                initLeft = btn.offsetLeft;
-                initTop = btn.offsetTop;
-                isDragging = false;
-
-                const onMouseMove = (evt) => {
-                    const dx = evt.clientX - startX;
-                    const dy = evt.clientY - startY;
-                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                        isDragging = true;
-                        btn.style.left = (initLeft + dx) + "px";
-                        btn.style.top = (initTop + dy) + "px";
-                        btn.style.bottom = 'auto';
-                        btn.style.right = 'auto';
-                    }
-                };
-
-                const onMouseUp = () => {
-                    document.removeEventListener("mousemove", onMouseMove);
-                    document.removeEventListener("mouseup", onMouseUp);
-                    if (!isDragging) toggleAlarm();
-                };
-
-                document.addEventListener("mousemove", onMouseMove);
-                document.addEventListener("mouseup", onMouseUp);
-            });
-
-            btn.addEventListener("touchstart", (e) => {
-                unlockAudioSystem();
-                const touch = e.touches[0];
-                startX = touch.clientX;
-                startY = touch.clientY;
-                initLeft = btn.offsetLeft;
-                initTop = btn.offsetTop;
-                isDragging = false;
-            }, {passive: false});
-
-            btn.addEventListener("touchmove", (e) => {
-                const touch = e.touches[0];
-                const dx = touch.clientX - startX;
-                const dy = touch.clientY - startY;
-                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                    isDragging = true;
-                    e.preventDefault();
-                    btn.style.left = (initLeft + dx) + "px";
-                    btn.style.top = (initTop + dy) + "px";
-                    btn.style.bottom = 'auto';
-                    btn.style.right = 'auto';
-                }
-            }, {passive: false});
-
-            btn.addEventListener("touchend", (e) => {
-                if (!isDragging) {
-                    e.preventDefault();
-                    toggleAlarm();
-                }
-                isDragging = false;
-            });
-        }
-
-        // --- অন্যান্য ফাংশন ---
-        function setLanguage(lang) {
-            currentLang = lang;
-            document.getElementById("btnBN").classList.toggle("active", lang === 'bn');
-            document.getElementById("btnEN").classList.toggle("active", lang === 'en');
-            updateUILanguage();
-            if(document.getElementById("customerModal").style.display === "block" && currentAnimatingMarker) {
-                openCustomerModal(currentAnimatingMarker.data);
-            }
-        }
-
-        function updateUILanguage() {
-            const t = texts[currentLang];
-            document.getElementById("uiTitle").innerText = t.title;
-            document.getElementById("searchInput").placeholder = t.searchCustPlace;
-            document.getElementById("meterInput").placeholder = t.searchMeterPlace;
-            document.getElementById("btnSearchCust").innerText = t.btnSearch;
-            document.getElementById("btnSearchMeter").innerText = t.btnSearch;
-            document.getElementById("filterHeader").innerText = t.filterTitle;
-            document.getElementById("bookFilterHeader").innerText = t.bookFilterTitle;
-            
-            const bookSelect = document.getElementById("bookSelect");
-            if(bookSelect.options.length > 0) {
-                bookSelect.options[0].text = t.allBooks;
-            }
-
-            const alarmBtnText = document.getElementById("alarmText");
-            alarmBtnText.innerText = alarmEnabled ? t.alarmOn : t.alarmOff;
-            if(userCurrentPos) document.getElementById("locationStatus").innerHTML = `<span style="font-size:16px;">📍</span> ${t.locActive}`;
-            else document.getElementById("locationStatus").innerText = t.locLoading;
-        }
-
-        function togglePanel() {
-            const panel = document.getElementById("mainPanel");
-            const btn = document.getElementById("toggleBtn");
-            isPanelMinimized = !isPanelMinimized;
-            if (isPanelMinimized) { panel.classList.add("minimized"); btn.innerHTML = "+"; btn.style.color = "#1a73e8"; } 
-            else { panel.classList.remove("minimized"); btn.innerHTML = "×"; btn.style.color = "#5f6368"; }
-        }
-
-        function setupPanelDraggable() { makeElementDraggable(document.getElementById("mainPanel"), document.getElementById("panelHeader")); }
-
-        function makeElementDraggable(elm, h) {
-            let sX, sY, iL, iT;
-            const start = (e) => {
-                if(e.target.id === "toggleBtn" || e.target.classList.contains("lang-btn")) return;
-                const evt = e.type.includes('touch') ? e.touches[0] : e;
-                sX = evt.clientX; sY = evt.clientY; iL = elm.offsetLeft; iT = elm.offsetTop;
-                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move);
-                document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end);
-            };
-            const move = (e) => {
-                e.preventDefault(); const evt = e.type.includes('touch') ? e.touches[0] : e;
-                elm.style.left = (iL + (evt.clientX - sX)) + "px"; elm.style.top = (iT + (evt.clientY - sY)) + "px";
-            };
-            const end = () => {
-                document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move);
-                document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end);
-            };
-            h.addEventListener("mousedown", start); h.addEventListener("touchstart", start);
-        }
-
-        function setupPanelResize() {
-            const panel = document.getElementById("mainPanel");
-            const handle = document.getElementById("resizeHandle");
-            let sW, sH, sX, sY;
-            const start = (e) => {
-                if(isPanelMinimized) return;
-                const evt = e.type.includes('touch') ? e.touches[0] : e;
-                sW = panel.offsetWidth; sH = panel.offsetHeight; sX = evt.clientX; sY = evt.clientY;
-                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move);
-                document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end); e.preventDefault(); e.stopPropagation();
-            };
-            const move = (e) => {
-                const evt = e.type.includes('touch') ? e.touches[0] : e;
-                const nW = sW + (evt.clientX - sX); const nH = sH + (evt.clientY - sY);
-                if(nW > 250) panel.style.width = nW + "px"; if(nH > 100) panel.style.height = nH + "px";
-            };
-            const end = () => {
-                document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move);
-                document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end);
-            };
-            handle.addEventListener("mousedown", start); handle.addEventListener("touchstart", start);
-        }
-
-        function loadCustomerData() {
-            if (typeof google !== 'undefined' && google.script && google.script.run) {
-                google.script.run.withSuccessHandler(processData).getCustomerData();
-            } else {
-                processData([
-                    {name: "Test User 1", lat: 23.685, lng: 90.356, balance: 16000, iconColor: 'red', custNum: "1001", mobile: "01700 000000", bookNo: "B-01", meterNo: "M1", tariff: "A", address: "Dhaka"},
-                    {name: "Test User 2", lat: 23.686, lng: 90.357, balance: 6000, iconColor: 'orange', custNum: "1002", mobile: "N/A", bookNo: "B-02", meterNo: "M2", tariff: "A", address: "Dhaka"},
-                    {name: "Test User 3", lat: 23.684, lng: 90.355, balance: 2000, iconColor: 'green', custNum: "1003", mobile: "01800-000000", bookNo: "B-01", meterNo: "M3", tariff: "A", address: "Dhaka"}
-                ]); 
+                    return {
+                        name: row.CUST_NAM || 'N/A',
+                        custNum: String(row.CUST_NU || row.CUST_NUM || '').trim(),
+                        lat: lat, 
+                        lng: lng,
+                        mobile: String(row.mobile_no || row.MOBILE_NO || '').trim() || 'N/A',
+                        address: row.ADDRESS || 'N/A',
+                        balance: bal,
+                        bookNo: row.BOOK || 'N/A',
+                        meterNo: String(row.METER_NO || row.ME || '').trim(),
+                        tariff: row.CATA || 'N/A',
+                        iconColor: iconColor
+                    };
+                }).filter(item => item !== null);
+                
+                processData(formattedData);
+                startLocationTracking();
+                
+            } catch (error) {
+                console.error("Excel Load Error:", error);
+                document.getElementById("locationStatus").innerText = "⚠️ এক্সেল ডাটা লোড ব্যর্থ";
+                alert("এক্সেল ফাইলটি লোড করা সম্ভব হয়নি। GitHub লিংকটি ঠিক আছে কিনা চেক করুন।");
             }
         }
         
@@ -501,64 +340,114 @@
             applyFilters(); 
         }
 
+        function checkAlarms() {
+            if (!alarmEnabled || !userCurrentPos || customerMarkers.length === 0) { stopAllAlarms(); return; }
+            let playRed = false; let playOrange = false;
+            for (let i = 0; i < customerMarkers.length; i++) {
+                const m = customerMarkers[i];
+                if (!m.getMap()) continue; 
+                const dist = google.maps.geometry.spherical.computeDistanceBetween(new google.maps.LatLng(userCurrentPos), m.getPosition());
+                if (dist <= PROXIMITY_THRESHOLD) { 
+                    if (m.data.balance >= 15000) { playRed = true; break; } 
+                    else if (m.data.balance >= 5000) { playOrange = true; }
+                }
+            }
+            if (playRed) {
+                if (highAudio.paused) { mediumAudio.pause(); mediumAudio.currentTime = 0; highAudio.currentTime = 0; highAudio.play().catch(e => {}); }
+            } else if (playOrange) {
+                if (mediumAudio.paused) { highAudio.pause(); highAudio.currentTime = 0; mediumAudio.currentTime = 0; mediumAudio.play().catch(e => {}); }
+            } else { stopAllAlarms(); }
+        }
+
+        function stopAllAlarms() { mediumAudio.pause(); mediumAudio.currentTime = 0; highAudio.pause(); highAudio.currentTime = 0; }
+
+        function setupAlarmDrag() {
+            const btn = document.getElementById("alarmToggleBtn"); let isDragging = false; let startX, startY, initLeft, initTop;
+            btn.addEventListener("mousedown", (e) => {
+                unlockAudioSystem(); startX = e.clientX; startY = e.clientY; initLeft = btn.offsetLeft; initTop = btn.offsetTop; isDragging = false;
+                const onMouseMove = (evt) => { const dx = evt.clientX - startX; const dy = evt.clientY - startY;
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) { isDragging = true; btn.style.left = (initLeft + dx) + "px"; btn.style.top = (initTop + dy) + "px"; btn.style.bottom = 'auto'; btn.style.right = 'auto'; }
+                };
+                const onMouseUp = () => { document.removeEventListener("mousemove", onMouseMove); document.removeEventListener("mouseup", onMouseUp); if (!isDragging) toggleAlarm(); };
+                document.addEventListener("mousemove", onMouseMove); document.addEventListener("mouseup", onMouseUp);
+            });
+            btn.addEventListener("touchstart", (e) => { unlockAudioSystem(); const touch = e.touches[0]; startX = touch.clientX; startY = touch.clientY; initLeft = btn.offsetLeft; initTop = btn.offsetTop; isDragging = false; }, {passive: false});
+            btn.addEventListener("touchmove", (e) => { const touch = e.touches[0]; const dx = touch.clientX - startX; const dy = touch.clientY - startY;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) { isDragging = true; e.preventDefault(); btn.style.left = (initLeft + dx) + "px"; btn.style.top = (initTop + dy) + "px"; btn.style.bottom = 'auto'; btn.style.right = 'auto'; }
+            }, {passive: false});
+            btn.addEventListener("touchend", (e) => { if (!isDragging) { e.preventDefault(); toggleAlarm(); } isDragging = false; });
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang; document.getElementById("btnBN").classList.toggle("active", lang === 'bn'); document.getElementById("btnEN").classList.toggle("active", lang === 'en');
+            updateUILanguage(); if(document.getElementById("customerModal").style.display === "block" && currentAnimatingMarker) { openCustomerModal(currentAnimatingMarker.data); }
+        }
+
+        function updateUILanguage() {
+            const t = texts[currentLang];
+            document.getElementById("uiTitle").innerText = t.title; document.getElementById("searchInput").placeholder = t.searchCustPlace; document.getElementById("meterInput").placeholder = t.searchMeterPlace;
+            document.getElementById("btnSearchCust").innerText = t.btnSearch; document.getElementById("btnSearchMeter").innerText = t.btnSearch;
+            document.getElementById("filterHeader").innerText = t.filterTitle; document.getElementById("bookFilterHeader").innerText = t.bookFilterTitle;
+            const bookSelect = document.getElementById("bookSelect"); if(bookSelect.options.length > 0) { bookSelect.options[0].text = t.allBooks; }
+            document.getElementById("alarmText").innerText = alarmEnabled ? t.alarmOn : t.alarmOff;
+            if(userCurrentPos) document.getElementById("locationStatus").innerHTML = `<span style="font-size:16px;">📍</span> ${t.locActive}`;
+        }
+
+        function togglePanel() {
+            const panel = document.getElementById("mainPanel"); const btn = document.getElementById("toggleBtn"); isPanelMinimized = !isPanelMinimized;
+            if (isPanelMinimized) { panel.classList.add("minimized"); btn.innerHTML = "+"; btn.style.color = "#1a73e8"; } 
+            else { panel.classList.remove("minimized"); btn.innerHTML = "×"; btn.style.color = "#5f6368"; }
+        }
+
+        function setupPanelDraggable() { makeElementDraggable(document.getElementById("mainPanel"), document.getElementById("panelHeader")); }
+
+        function makeElementDraggable(elm, h) {
+            let sX, sY, iL, iT;
+            const start = (e) => { if(e.target.id === "toggleBtn" || e.target.classList.contains("lang-btn")) return; const evt = e.type.includes('touch') ? e.touches[0] : e; sX = evt.clientX; sY = evt.clientY; iL = elm.offsetLeft; iT = elm.offsetTop;
+                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move); document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end);
+            };
+            const move = (e) => { e.preventDefault(); const evt = e.type.includes('touch') ? e.touches[0] : e; elm.style.left = (iL + (evt.clientX - sX)) + "px"; elm.style.top = (iT + (evt.clientY - sY)) + "px"; };
+            const end = () => { document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move); document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end); };
+            h.addEventListener("mousedown", start); h.addEventListener("touchstart", start);
+        }
+
+        function setupPanelResize() {
+            const panel = document.getElementById("mainPanel"); const handle = document.getElementById("resizeHandle"); let sW, sH, sX, sY;
+            const start = (e) => { if(isPanelMinimized) return; const evt = e.type.includes('touch') ? e.touches[0] : e; sW = panel.offsetWidth; sH = panel.offsetHeight; sX = evt.clientX; sY = evt.clientY;
+                document.addEventListener(e.type.includes('touch') ? 'touchmove' : 'mousemove', move); document.addEventListener(e.type.includes('touch') ? 'touchend' : 'mouseup', end); e.preventDefault(); e.stopPropagation();
+            };
+            const move = (e) => { const evt = e.type.includes('touch') ? e.touches[0] : e; const nW = sW + (evt.clientX - sX); const nH = sH + (evt.clientY - sY); if(nW > 250) panel.style.width = nW + "px"; if(nH > 100) panel.style.height = nH + "px"; };
+            const end = () => { document.removeEventListener('mousemove', move); document.removeEventListener('touchmove', move); document.removeEventListener('mouseup', end); document.removeEventListener('touchend', end); };
+            handle.addEventListener("mousedown", start); handle.addEventListener("touchstart", start);
+        }
+
         function populateBookFilter() {
-            const select = document.getElementById("bookSelect");
-            select.innerHTML = `<option value="all">${texts[currentLang].allBooks}</option>`;
+            const select = document.getElementById("bookSelect"); select.innerHTML = `<option value="all">${texts[currentLang].allBooks}</option>`;
             const books = allCustomerData.map(c => c.bookNo ? String(c.bookNo).trim() : "").filter(b => b !== "");
             const uniqueBooks = [...new Set(books)].sort();
-            uniqueBooks.forEach(book => {
-                const option = document.createElement("option");
-                option.value = book;
-                option.innerText = book;
-                select.appendChild(option);
-            });
+            uniqueBooks.forEach(book => { const option = document.createElement("option"); option.value = book; option.innerText = book; select.appendChild(option); });
         }
 
         function applyFilters() {
             customerMarkers.forEach(m => m.setMap(null)); customerMarkers = [];
-            
-            const r = document.getElementById("filterRed").checked;
-            const o = document.getElementById("filterOrange").checked;
-            const g = document.getElementById("filterGreen").checked;
-            const selectedBook = document.getElementById("bookSelect").value;
-
+            const r = document.getElementById("filterRed").checked; const o = document.getElementById("filterOrange").checked; const g = document.getElementById("filterGreen").checked; const selectedBook = document.getElementById("bookSelect").value;
             allCustomerData.forEach(c => {
                 let show = false;
-                if ((c.iconColor === 'red' && r) || (c.iconColor === 'orange' && o) || (c.iconColor === 'green' && g)) {
-                    show = true;
-                }
-                if (show && selectedBook !== 'all') {
-                    const cBook = c.bookNo ? String(c.bookNo).trim() : "";
-                    if (cBook !== selectedBook) {
-                        show = false;
-                    }
-                }
+                if ((c.iconColor === 'red' && r) || (c.iconColor === 'orange' && o) || (c.iconColor === 'green' && g)) show = true;
+                if (show && selectedBook !== 'all') { const cBook = c.bookNo ? String(c.bookNo).trim() : ""; if (cBook !== selectedBook) show = false; }
                 if (show) {
-                    const m = new google.maps.Marker({
-                        position: { lat: c.lat, lng: c.lng }, map: map,
-                        icon: 'https://maps.gstatic.com/mapfiles/ms2/micons/' + c.iconColor + '-dot.png',
-                        title: c.name
-                    });
+                    const m = new google.maps.Marker({ position: { lat: c.lat, lng: c.lng }, map: map, icon: 'https://maps.gstatic.com/mapfiles/ms2/micons/' + c.iconColor + '-dot.png', title: c.name });
                     m.addListener("click", () => { openCustomerModal(c); calculateRoute(c); animateMarker(m); });
-                    m.data = c;
-                    customerMarkers.push(m);
+                    m.data = c; customerMarkers.push(m);
                 }
             });
             checkAlarms();
         }
 
         function openCustomerModal(data) {
-            currentAnimatingMarker = { data: data };
-            const modal = document.getElementById("customerModal");
-            const title = document.getElementById("modalCustName");
-            const body = document.getElementById("modalBodyContent");
-            const t = texts[currentLang];
-            title.innerText = data.name;
-            let balClass = data.iconColor === 'red' ? 'bal-red' : (data.iconColor === 'orange' ? 'bal-orange' : 'bal-green');
-            
-            // মোবাইল নাম্বার ক্লিন করা (শুধুমাত্র ডায়াল করার জন্য)
+            currentAnimatingMarker = { data: data }; const modal = document.getElementById("customerModal"); const title = document.getElementById("modalCustName"); const body = document.getElementById("modalBodyContent"); const t = texts[currentLang];
+            title.innerText = data.name; let balClass = data.iconColor === 'red' ? 'bal-red' : (data.iconColor === 'orange' ? 'bal-orange' : 'bal-green');
             let cleanMobile = data.mobile ? data.mobile.replace(/[^0-9+]/g, '') : '';
-
             body.innerHTML = `
                 <div class="info-item">
                     <span class="label">${t.modalBal}</span>
@@ -566,61 +455,38 @@
                 </div>
                 <div class="info-item">
                     <span class="label">${t.modalCust}</span>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="value">${data.custNum}</span>
-                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><span class="value">${data.custNum}</span></div>
                     <div class="action-row"><button class="btn btn-copy" onclick="copyToClipboard('${data.custNum}')">${t.btnCopy}</button></div>
                 </div>
                 <div class="info-item">
                     <span class="label">${t.modalMobile}</span>
                     <span class="value">${data.mobile || '-'}</span>
-                    ${data.mobile && data.mobile !== 'N/A' ? `
-                    <div class="action-row">
-                        <a href="tel:${cleanMobile}" class="btn btn-call">${t.btnCall}</a>
-                        <button class="btn btn-copy" onclick="copyToClipboard('${data.mobile}')">${t.btnCopy}</button>
-                    </div>` : ''}
-                    <button id="btnUpdate_${data.custNum}" class="btn btn-update" onclick="promptUpdateBalance('${data.custNum}', ${data.balance})">
+                    ${data.mobile && data.mobile !== 'N/A' ? `<div class="action-row"><a href="tel:${cleanMobile}" class="btn btn-call">${t.btnCall}</a><button class="btn btn-copy" onclick="copyToClipboard('${data.mobile}')">${t.btnCopy}</button></div>` : ''}
+                    <button id="btnUpdate_${data.custNum}" class="btn btn-update" onclick="promptUpdateBalance()">
                         ${t.btnUpdate}
                     </button>
                 </div>
                 <div class="info-item">
                     <span class="label">${t.modalDetail}</span>
-                    <div style="font-size:14px;">
-                        Meter: <b>${data.meterNo}</b> | Book: <b>${data.bookNo}</b> | Tariff: <b>${data.tariff}</b><br>Addr: ${data.address}
-                    </div>
+                    <div style="font-size:14px;">Meter: <b>${data.meterNo}</b> | Book: <b>${data.bookNo}</b> | Tariff: <b>${data.tariff}</b><br>Addr: ${data.address}</div>
                 </div>
                 <button class="btn-close-full" onclick="closeModal()">${t.btnClose}</button>
             `;
-            modal.style.display = "block";
-            if(window.innerWidth < 600 && !isPanelMinimized) togglePanel();
+            modal.style.display = "block"; if(window.innerWidth < 600 && !isPanelMinimized) togglePanel();
         }
 
-        function promptUpdateBalance(custNum, oldBal) {
-            const t = texts[currentLang];
-            const newBal = prompt(t.promptUpdate, oldBal);
-            if (newBal !== null && !isNaN(newBal) && newBal.trim() !== "") {
-                const btn = document.getElementById("btnUpdate_" + custNum);
-                const originalText = btn.innerHTML;
-                btn.innerHTML = `<div class="spinner"></div> ${t.updating}`; btn.disabled = true;
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    google.script.run.withSuccessHandler(res => {
-                        alert(t.updateSuccess + " " + newBal); loadCustomerData(); closeModal();
-                    }).withFailureHandler(err => {
-                        alert(t.updateFail); btn.innerHTML = originalText; btn.disabled = false;
-                    }).updateCustomerBalance(custNum, newBal);
-                } else {
-                    setTimeout(() => { alert("Mock: " + t.updateSuccess + " " + newBal); closeModal(); }, 1000);
-                }
-            }
+        function promptUpdateBalance() {
+            // GitHub Pages is Read-Only. Update button will only show this alert now.
+            alert("⚠️ এটি GitHub Pages-এর রিড-ওনলি (Read-Only) ভার্সন। এখান থেকে ব্যালেন্স আপডেট করে এক্সেল ফাইলে সেভ করা সম্ভব নয়। ডাটা আপডেট করতে সরাসরি মূল এক্সেল ফাইলটি এডিট করতে হবে।");
         }
+        
         function closeModal() { document.getElementById("customerModal").style.display = "none"; }
         function copyToClipboard(txt) { navigator.clipboard.writeText(txt).then(() => alert(texts[currentLang].btnCopy + ": " + txt)); }
         function animateMarker(m) { map.setZoom(18); map.setCenter(m.getPosition()); m.setAnimation(google.maps.Animation.BOUNCE); setTimeout(()=>m.setAnimation(null), 3000); }
         function searchCustomer() { executeSearch('custNum', document.getElementById("searchInput").value); }
         function searchMeter() { executeSearch('meterNo', document.getElementById("meterInput").value); }
         function executeSearch(k, v) {
-            if(!v) return;
-            const t = customerMarkers.find(m => String(m.data[k]).trim() === String(v).trim());
+            if(!v) return; const t = customerMarkers.find(m => String(m.data[k]).trim() === String(v).trim());
             if (t) { animateMarker(t); openCustomerModal(t.data); calculateRoute(t.data); } else { alert(texts[currentLang].notFound); }
         }
 
@@ -631,25 +497,18 @@
                     const t = texts[currentLang];
                     document.getElementById("locationStatus").innerHTML = `<span style="font-size:16px;">📍</span> ${t.locActive}`;
                     document.getElementById("locationStatus").style.color = "#137333";
-                    
                     if (!userMarker) {
-                        userMarker = new google.maps.Marker({
-                            position: userCurrentPos, map: map,
-                            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: "#1a73e8", fillOpacity: 1, strokeColor: "white", strokeWeight: 2 }
-                        });
+                        userMarker = new google.maps.Marker({ position: userCurrentPos, map: map, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: "#1a73e8", fillOpacity: 1, strokeColor: "white", strokeWeight: 2 } });
                         map.setCenter(userCurrentPos);
                     } else { userMarker.setPosition(userCurrentPos); }
-                    
                     checkAlarms(); 
-
                 }, e => document.getElementById("locationStatus").innerHTML = texts[currentLang].locError, { enableHighAccuracy: true });
             }
         }
 
         function calculateRoute(d) {
             if (!userCurrentPos) return;
-            const b = document.getElementById("routeDisplay"); b.style.display="block"; 
-            b.innerHTML = texts[currentLang].routeFinding;
+            const b = document.getElementById("routeDisplay"); b.style.display="block"; b.innerHTML = texts[currentLang].routeFinding;
             directionsService.route({ origin: userCurrentPos, destination: { lat: d.lat, lng: d.lng }, travelMode: 'DRIVING' }, (r, s) => {
                 const t = texts[currentLang];
                 if (s === 'OK') { directionsRenderer.setDirections(r); b.innerHTML = `🚗 ${t.dist}: ${r.routes[0].legs[0].distance.text} | ⏱️ ${t.time}: ${r.routes[0].legs[0].duration.text}`; } 
@@ -658,18 +517,9 @@
         }
 
         function toggleAlarm() {
-            alarmEnabled = !alarmEnabled;
-            unlockAudioSystem();
-            updateUILanguage();
-            
+            alarmEnabled = !alarmEnabled; unlockAudioSystem(); updateUILanguage();
             const btn = document.getElementById("alarmToggleBtn");
-            if(!alarmEnabled) {
-                btn.classList.add("off");
-                stopAllAlarms();
-            } else {
-                btn.classList.remove("off");
-                checkAlarms();
-            }
+            if(!alarmEnabled) { btn.classList.add("off"); stopAllAlarms(); } else { btn.classList.remove("off"); checkAlarms(); }
         }
 
     </script>
